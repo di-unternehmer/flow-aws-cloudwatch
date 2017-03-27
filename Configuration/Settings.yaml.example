@@ -1,0 +1,15 @@
+Neos:
+  Flow:
+    log:
+      systemLogger:
+        backend: Wazisera\Aws\CloudWatch\CloudWatchBackend
+        backendOptions:
+          profile:
+            credentials:
+              key: 'ABCD123EFG456HIJ7890'
+              secret: 'aBc123DEf456GHi789JKlMNopqRsTuVWXyz12345'
+            version: 'latest'
+            region: 'eu-central-1'
+          logGroupName: 'TestLogGroup'
+          logStreamName: 'TestLogStream'
+

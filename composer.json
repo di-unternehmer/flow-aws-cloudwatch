@@ -1,0 +1,19 @@
+{
+    "name": "wazisera/aws/cloud-watch",
+    "description": "",
+    "type": "neos-package",
+    "require": {
+        "neos/flow": "~4.0",
+        "aws/aws-sdk-php": "~3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Wazisera\\Aws\\CloudWatch\\": "Classes"
+        }
+    },
+    "extra": {
+        "neos": {
+            "package-key": "Wazisera.Aws.CloudWatch"
+        }
+    }
+}
