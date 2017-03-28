@@ -1,5 +1,5 @@
 {
-    "name": "wazisera/aws/cloud-watch",
+    "name": "wazisera/aws-cloud-watch",
     "description": "",
     "type": "neos-package",
     "keywords": ["log", "logging", "aws", "cloudwatch", "flow", "neos"],
