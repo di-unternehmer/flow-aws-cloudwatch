@@ -12,4 +12,5 @@ Neos:
             region: 'eu-central-1'
           logGroupName: 'TestLogGroup'
           logStreamName: 'TestLogStream'
+          autoCreateLogStream: true
 

@@ -1,6 +1,10 @@
 <?php
 namespace Wazisera\Aws\CloudWatch;
 
+/*                                                                        *
+ * This script belongs to the package "Wazisera.Aws.CloudWatch".          *
+ *                                                                        *
+ *                                                                        */
 
 use Aws\CloudWatchLogs\CloudWatchLogsClient;
 use Aws\CloudWatchLogs\Exception\CloudWatchLogsException;
@@ -11,24 +15,32 @@ use Neos\Flow\ObjectManagement\ObjectManager;
 
 /**
  * Class CloudWatchBackend
- * @package Wazisera\Aws\CloudWatch
  */
 class CloudWatchBackend extends AbstractBackend {
 
     /**
+     * Credentials for the AWS account
      * @var array
      */
     protected $profile = array();
 
     /**
+     * CloudWatch LogGroupName
      * @var string
      */
     protected $logGroupName = '';
 
     /**
+     * CloudWatch LogStreamName
      * @var string
      */
     protected $logStreamName = '';
+
+    /**
+     * Should create the given logStream if it not exists
+     * @var bool
+     */
+    protected $autoCreateLogStream = true;
 
     /**
      * An array of severity labels, indexed by their integer constant
@@ -37,6 +49,7 @@ class CloudWatchBackend extends AbstractBackend {
     protected $severityLabels = array();
 
     /**
+     * Next sequenceToken for next log event
      * @var null
      */
     protected $nextSequenceToken = null;
@@ -45,6 +58,11 @@ class CloudWatchBackend extends AbstractBackend {
      * @var CloudWatchLogsClient
      */
     protected $client;
+
+    /**
+     * @var bool
+     */
+    protected $useLog = true;
 
     /**
      * @param array $profile
@@ -65,6 +83,13 @@ class CloudWatchBackend extends AbstractBackend {
      */
     public function setLogStreamName($logStreamName) {
         $this->logStreamName = $logStreamName;
+    }
+
+    /**
+     * @param bool $autoCreateLogStream
+     */
+    public function setAutoCreateLogStream($autoCreateLogStream) {
+        $this->autoCreateLogStream = $autoCreateLogStream;
     }
 
     /**
@@ -104,13 +129,12 @@ class CloudWatchBackend extends AbstractBackend {
      * @return void
      */
     public function append($message, $severity = 1, $additionalData = null, $packageKey = null, $className = null, $methodName = null) {
-        if($this->client == null) {
+        if($this->client == null || $this->useLog == false) {
             return;
         }
         try {
             $severityLabel = (isset($this->severityLabels[$severity])) ? $this->severityLabels[$severity] : 'UNKNOWN  ';
             $message = $severityLabel . ' - ' . str_pad($packageKey, 20) . ' - ' . $message;
-
             $logData = [
                 'logGroupName' => $this->logGroupName,
                 'logStreamName' => $this->logStreamName,
@@ -127,6 +151,7 @@ class CloudWatchBackend extends AbstractBackend {
             $result = $this->client->putLogEvents($logData);
             $this->nextSequenceToken = $result['nextSequenceToken'];
         } catch (CloudWatchLogsException $e) {
+            $this->useLog = false;
         }
     }
 
@@ -139,17 +164,34 @@ class CloudWatchBackend extends AbstractBackend {
     }
 
     /**
-     *
+     * Prepares the CloudWatch log by fetching the next sequenceToken.
+     * If the LogStream does not exist it will be created when autoCreateLogStream is true.
      */
     protected function prepareLog() {
         try {
             /** @var Result $result */
             $result = $this->client->describeLogStreams(['logGroupName' => $this->logGroupName, 'logStreamNamePrefix' => $this->logStreamName]);
+
             foreach($result['logStreams'] as $logStream) {
                 if($logStream['logStreamName'] === $this->logStreamName) {
-                    $this->nextSequenceToken = $logStream['uploadSequenceToken'];
+                    if(array_key_exists('uploadSequenceToken', $logStream)) {
+                        $this->nextSequenceToken = $logStream['uploadSequenceToken'];
+                    }
+                    return;
                 }
             }
+
+            // no logStream found, create one
+            if($this->autoCreateLogStream === true) {
+                try {
+                    $this->client->createLogStream([
+                        'logGroupName' => $this->logGroupName,
+                        'logStreamName' => $this->logStreamName
+                    ]);
+                } catch (CloudWatchLogsException $e) {
+                }
+            }
+
         } catch (CloudWatchLogsException $e) {
         }
     }
