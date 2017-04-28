@@ -5,7 +5,7 @@
     "keywords": ["log", "logging", "aws", "cloudwatch", "flow", "neos"],
     "homepage": "https://github.com/wazisera/flow-aws-cloudwatch",
     "license": "MIT",
-    "version": "1.0",
+    "version": "1.0.1",
     "require": {
         "neos/flow": "~4.0",
         "aws/aws-sdk-php": "~3.0"
