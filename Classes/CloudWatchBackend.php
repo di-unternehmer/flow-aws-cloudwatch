@@ -11,7 +11,6 @@ use Aws\CloudWatchLogs\Exception\CloudWatchLogsException;
 use Aws\Result;
 use Neos\Flow\Log\Backend\AbstractBackend;
 use Neos\Flow\Annotations as Flow;
-use Neos\Flow\ObjectManagement\ObjectManager;
 
 /**
  * Class CloudWatchBackend
@@ -63,6 +62,26 @@ class CloudWatchBackend extends AbstractBackend {
      * @var bool
      */
     protected $useLog = true;
+
+    /**
+     * @var array
+     */
+    protected $messageRecords = array();
+
+    /**
+     * @var int
+     */
+    protected $recordAmountLimit = 1048576;
+
+    /**
+     * @var int
+     */
+    protected $currentRecordAmount = 0;
+
+    /**
+     * @var int
+     */
+    protected $batchSize = 10000;
 
     /**
      * @param array $profile
@@ -129,38 +148,23 @@ class CloudWatchBackend extends AbstractBackend {
      * @return void
      */
     public function append($message, $severity = 1, $additionalData = null, $packageKey = null, $className = null, $methodName = null) {
-        if($this->client == null || $this->useLog == false) {
-            return;
+        $record = $this->createRecord($message, $severity, $packageKey);
+
+        if ($this->currentRecordAmount + $this->getRecordSize($record) >= $this->recordAmountLimit || count($this->messageRecords) >= $this->batchSize) {
+            $this->flushBuffer();
+            $this->messageRecords[] = $record;
+        } else {
+            $this->messageRecords[] = $record;
+            $this->currentRecordAmount += $this->getRecordSize($record);
         }
-        try {
-            $severityLabel = (isset($this->severityLabels[$severity])) ? $this->severityLabels[$severity] : 'UNKNOWN  ';
-            $message = $severityLabel . ' - ' . str_pad($packageKey, 20) . ' - ' . $message;
-            $logData = [
-                'logGroupName' => $this->logGroupName,
-                'logStreamName' => $this->logStreamName,
-                'logEvents' => [
-                    [
-                        'message' => $message,
-                        'timestamp' => round(microtime(true) * 1000),
-                    ]
-                ],
-            ];
-            if($this->nextSequenceToken != null) {
-                $logData['sequenceToken'] = $this->nextSequenceToken;
-            }
-            $result = $this->client->putLogEvents($logData);
-            $this->nextSequenceToken = $result['nextSequenceToken'];
-        } catch (CloudWatchLogsException $e) {
-            $this->useLog = false;
-        }
+        $this->flushBuffer(); // workaround
     }
 
     /**
-     * Does nothing
-     *
      * @return void
      */
     public function close() {
+        $this->flushBuffer();
     }
 
     /**
@@ -194,5 +198,56 @@ class CloudWatchBackend extends AbstractBackend {
 
         } catch (CloudWatchLogsException $e) {
         }
+    }
+
+    /**
+     * @param $message
+     * @param $severity
+     * @param $packageKey
+     * @return array
+     */
+    protected function createRecord($message, $severity, $packageKey) {
+        $severityLabel = (isset($this->severityLabels[$severity])) ? $this->severityLabels[$severity] : 'UNKNOWN  ';
+        $message = $severityLabel . ' - ' . str_pad($packageKey, 20) . ' - ' . $message;
+        return array(
+            'message' => $message,
+            'timestamp' => round(microtime(true) * 1000),
+        );
+    }
+
+    /**
+     * @param $record
+     * @return int
+     */
+    protected function getRecordSize($record) {
+        return strlen($record['message']) + 26;
+    }
+
+    /**
+     * Flush the buffer and send it to Cloudwatch
+     */
+    protected function flushBuffer() {
+        if($this->client == null || $this->useLog == false || empty($this->messageRecords)) {
+            return;
+        }
+
+        $logData = [
+            'logGroupName' => $this->logGroupName,
+            'logStreamName' => $this->logStreamName,
+            'logEvents' => $this->messageRecords
+        ];
+        if($this->nextSequenceToken != null) {
+            $logData['sequenceToken'] = $this->nextSequenceToken;
+        }
+
+        try {
+            $result = $this->client->putLogEvents($logData);
+            $this->nextSequenceToken = $result['nextSequenceToken'];
+        } catch (\Aws\CloudWatchLogs\Exception\CloudWatchLogsException $e) {
+            $this->useLog = false;
+        }
+
+        $this->currentRecordAmount = 0;
+        $this->messageRecords = array();
     }
 }
